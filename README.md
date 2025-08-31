@@ -19,6 +19,7 @@ docker compose up -d --build
 #Stop using
 docker compose down
 ```
+After that import Chatbot.json in workflow folder to blank n8n workflow
 
 ## Create a .env file (used by n8n):
 ```bash
@@ -40,3 +41,4 @@ N8N_BASIC_AUTH_PASSWORD=supersecret
 - **User**: `appuser`  
 - **Password**: `apppass`  
 - **Port**: `3306`  
+
