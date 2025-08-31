@@ -1,0 +1,59 @@
+version: "3.8"
+
+services:
+  db:
+    build:
+      context: ./mysql           # Dockerfile lives here
+      dockerfile: Dockerfile
+    container_name: myapp-mysql-chatbot
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: myapp
+      MYSQL_USER: appuser
+      MYSQL_PASSWORD: apppass
+      TZ: Asia/Bangkok
+    ports:
+      - "3306:3306"
+    volumes:
+      - dbdata:/var/lib/mysql
+      # keep init.sql as a bind mount so entrypoint runs it on first init
+      - ./mysql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-u", "root", "-prootpass"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  api:
+    build:
+      context: ./app_api
+    container_name: myapp-api-chatbot
+    environment:
+      DB_USER: root
+      DB_PASSWORD: rootpass
+      DB_HOST: db            # service name
+      DB_NAME: myapp
+      DB_PORT: "3306"
+      TZ: Asia/Bangkok
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+
+  n8n:
+    image: n8nio/n8n
+    restart: unless-stopped
+    ports:
+      - "5678:5678"          # change left side if 5678 is busy on host
+    env_file:
+      - .env
+    environment:
+      - GENERIC_TIMEZONE=Asia/Bangkok
+    volumes:
+      - ./n8n_data:/home/node/.n8n
+    depends_on:
+      - api
+
+volumes:
+  dbdata:

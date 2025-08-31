@@ -1,0 +1,1749 @@
+{
+  "name": "Chatbot",
+  "nodes": [
+    {
+      "parameters": {
+        "options": {
+          "responseMode": "responseNodes"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -2016,
+        816
+      ],
+      "id": "b809b95b-4cac-4876-ba62-2812d5903e1c",
+      "name": "When chat message received",
+      "webhookId": "a177c19e-85c0-499f-bc27-736d44d8ca2d"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-5-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-5-mini"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        -576,
+        1104
+      ],
+      "id": "47039f76-0fd2-45b8-8eda-fc9b337ab8af",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "tUgPKkvjfRqR5Zlf",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "text-embedding-3-large",
+        "options": {
+          "dimensions": 1024
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        -480,
+        1392
+      ],
+      "id": "9b7a1f73-3c46-45e1-8c94-b482aab397bd",
+      "name": "Embeddings OpenAI",
+      "credentials": {
+        "openAiApi": {
+          "id": "tUgPKkvjfRqR5Zlf",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "@n8n/n8n-nodes-langchain.rerankerCohere",
+      "typeVersion": 1,
+      "position": [
+        -192,
+        1408
+      ],
+      "id": "9c2031bf-66af-40eb-b77c-4b532c4bdffd",
+      "name": "Reranker Cohere",
+      "credentials": {
+        "cohereApi": {
+          "id": "6c9WffTHqXNWclOr",
+          "name": "CohereApi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $('When chat message received').item.json.chatInput }}",
+        "options": {
+          "systemMessage": "=You are a Thai-to-API parser agent.\nYour only job:\n\n-Read the user request (in Thai or English).\n-Retrieve the correct endpoint card and documentation chunks from the API database.\n-Output one raw JSON object describing the intended API call.\n-Do NOT wrap the JSON in markdown fences (orjson).\n\nCore Rules:\n\n1.The API Documentation and Endpoint Cards are the only truth.\n- Endpoint Cards contain entity, action, method, path_template, allowed payload keys, query/path params, constraints,    -TH_INTENTS, and examples.\n- Always use Endpoint Cards first.\n\n2.Retrieval is endpoint-first:\n-Always identify the endpoint by action + entity.\n-Never try to retrieve chunks by product names, customer names, or free-text values.\nProduct names like \"iPhone 16 Pro\" must go into payload or references, not into the retrieval query.\n\n3.Use Data Models only to confirm payload details.\n\n4.Use Conventions only for global rules (pagination, error handling, date formats, enums).\n\n5.Do not invent endpoints or fields. If a field is missing, set it to null and add a reference.\n\n6.\"confirm_needed\" will be true for all create and update while get will be false by most case except user forget or mess up important information needed.\n\n7. When create product, if user don't mention reorder level automatically assume it is 10 by default.\n\n8.Normalization:\n\nNumbers: strip commas/units (e.g., \"45,900 บาท\" → 45900).\nDates: YYYY-MM-DD\nDateTimes: ISO 8601 with timezone\nEnums: follow values from endpoint cards (e.g., payment_method ∈ {Cash, Card, QR}).\n\n9. IDs and References:\n\nNever invent IDs.\nIf a name is provided instead of an ID, set to null and add a reference with item_index:\n{ \"entity\":\"...\", \"name\":\"...\", \"id_field\":\"...\", \"item_index\": <index> }\nFor array items (like sale items), each reference must include an \"item_index\" field indicating which array element it belongs to (0-based indexing).\nFor non-array references, omit the \"item_index\" field.\n\nOutput Shape (always):\n{\n\"entity\": \"<entity>\",\n\"action\": \"<create|read|update|delete>\",\n\"path_params\": { ... },\n\"query\": { ... },\n\"payload\": { ... },\n\"confirm_needed\": true|false,\n\"notes\": \"<explain omitted/unresolved info>\",\n\"references\": [\n{ \"entity\": \"<entity>\", \"name\": \"<name to resolve>\", \"id_field\": \"<id_field>\", \"item_index\": <index> }\n]\n}\nNote: The \"item_index\" in references corresponds to the array position where the resolved ID should be applied (e.g., items[0], items[1], etc.)."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        -448,
+        816
+      ],
+      "id": "512357b6-5311-4ffa-bc54-9f547958651e",
+      "name": "AI Agent Parser"
+    },
+    {
+      "parameters": {
+        "jsCode": "// The incoming data has an 'output' field which is a string.\n// We need to parse this string into a real JSON object.\nconst item = $input.first();\nconst parsedJson = JSON.parse(item.json.output);\n\n// Return the newly parsed object for the next node to use.\nreturn [{\n  json: parsedJson\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -112,
+        816
+      ],
+      "id": "55675c84-fa60-4d47-8200-ad377f70c4ce",
+      "name": "JSON Parser"
+    },
+    {
+      "parameters": {
+        "mode": "retrieve-as-tool",
+        "toolDescription": "=This tool provides access to the Inventory Management API knowledge base.  \nIt contains four types of chunks:\n\n1. Endpoint descriptions – human-readable details about each endpoint (method, path, purpose, params).  \n2. Data models – request/response schemas with exact field names, types, and constraints.  \n3. Conventions – global rules such as pagination, date/datetime formats, enums, and error responses.  \n4. Endpoint cards – machine-readable JSON with entity, action, method, path_template, required payload keys, query/path params, constraints, Thai intent mappings (TH_INTENTS), and example requests.\n\nUse this tool to:\n- Always identify the correct **endpoint card** for the user’s intent (entity + action).  \n- Use the endpoint card as the primary source of truth (payload keys, path/query params, constraints, enums).  \n- If additional details are needed, look up the linked **data models** or **conventions**.  \n- Ignore product names or free-text values (like “iPhone 16 Pro”) when searching; those should be handled as **references**, not as retrieval queries.  \n- Do not invent endpoints, parameters, or payload fields. Only return what is documented.  \n\n",
+        "pineconeIndex": {
+          "__rl": true,
+          "value": "inventory-api",
+          "mode": "list",
+          "cachedResultName": "inventory-api"
+        },
+        "topK": 10,
+        "useReranker": true,
+        "options": {
+          "pineconeNamespace": "api_info",
+          "metadata": {
+            "metadataValues": [
+              {
+                "name": "topic",
+                "value": "={{ $('AI Agent Classifier').item.json.output }}"
+              }
+            ]
+          }
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.vectorStorePinecone",
+      "typeVersion": 1.3,
+      "position": [
+        -368,
+        1136
+      ],
+      "id": "18a287d1-8208-4b8c-b50c-0ff318f6518b",
+      "name": "API Information",
+      "credentials": {
+        "pineconeApi": {
+          "id": "tjoLOWsIQUPRCBh8",
+          "name": "PineconeApi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        -912,
+        1088
+      ],
+      "id": "6e50e3fd-a25f-46b1-8c79-69762d5a8ec0",
+      "name": "OpenAI Chat Model1",
+      "credentials": {
+        "openAiApi": {
+          "id": "tUgPKkvjfRqR5Zlf",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {
+          "systemMessage": "=# Overview\nYour job is to read the input text and classify it into exactly one of 7 topics.\nYou must always output only the topic name as plain text.\n\nValid topics:\n1. create-product\n2. get-product\n3. update-product\n4. create-sale\n5. get-stock-report\n6. get-stock-summary\n7. get-profit-summary\n\n## Example Use Cases\n\nInput: เมื่อกี้พึ่งขาย iPhone 16 Pro ไป 2 ตัว ลูกค้าจ่ายเงินสด\nOutput: create-sale\n\nInput: เพิ่มสินค้าใหม่ iPhone 16 Pro ราคา 45,900 บาท สต็อกเริ่มต้น 10 ชิ้น\nOutput: create-product\n\nInput: ขอรายการสินค้าทั้งหมดที่มีในระบบตอนนี้\nOutput: get-product\n\nInput: แก้ไขราคาสินค้า iPhone 15 Pro จาก 42,900 เป็น 40,900 บาท\nOutput: update-product\n\nInput: สรุปกำไรของร้านประจำสัปดาห์นี้หน่อย\nOutput: get-profit-summary\n\nInput: แสดงรายงานสต็อกสินค้าล่าสุดทั้งหมด\nOutput: get-stock-report\n\nInput: ขอรายการสรุปว่าสินค้าไหนใกล้หมดบ้าง\nOutput: get-stock-summary\n"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        -848,
+        816
+      ],
+      "id": "92fa86f2-c530-4c03-98d3-edcf79c15888",
+      "name": "AI Agent Classifier"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.entity }}",
+                    "rightValue": "category",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "f0369dfd-0cae-44a0-8d9d-14b68bd08f17"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "category"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "f29afd5c-4d8a-45a5-bbd5-89d11982b70b",
+                    "leftValue": "={{ $json.entity }}",
+                    "rightValue": "product",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "product"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        -848,
+        240
+      ],
+      "id": "67be7161-783b-42c1-8760-9100e90b4cd6",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "table": {
+          "__rl": true,
+          "value": "product",
+          "mode": "list",
+          "cachedResultName": "product"
+        },
+        "limit": 1,
+        "where": {
+          "values": [
+            {
+              "column": "name",
+              "condition": "LIKE",
+              "value": "=%{{ $json.name }}%"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.5,
+      "position": [
+        -688,
+        416
+      ],
+      "id": "608f2ffb-dd6c-4975-bf97-303b96905312",
+      "name": "Select Product",
+      "alwaysOutputData": true,
+      "credentials": {
+        "mySql": {
+          "id": "vqiSXP2AgEMu02q6",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "table": {
+          "__rl": true,
+          "value": "category",
+          "mode": "list",
+          "cachedResultName": "category"
+        },
+        "limit": 5,
+        "where": {
+          "values": [
+            {
+              "column": "name",
+              "condition": "LIKE",
+              "value": "=%{{ $json.name }}%"
+            }
+          ]
+        },
+        "combineConditions": "OR",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.5,
+      "position": [
+        -480,
+        80
+      ],
+      "id": "d8e0d885-c58f-486a-9a15-17afcc066492",
+      "name": "Select Category",
+      "alwaysOutputData": true,
+      "credentials": {
+        "mySql": {
+          "id": "vqiSXP2AgEMu02q6",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "references",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        -1120,
+        240
+      ],
+      "id": "affe61d8-a8f6-471b-a477-dc3c78bba4ea",
+      "name": "Split References"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "842510ec-f135-416f-862b-2ae6c2e5d1ee",
+              "leftValue": "={{ $json.references }}",
+              "rightValue": "",
+              "operator": {
+                "type": "array",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        128,
+        816
+      ],
+      "id": "9ef9d71b-2aba-474d-8473-28f257c8d030",
+      "name": "Check references"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "fac49269-8146-4cd1-97bc-2e4f43e12fb8",
+              "leftValue": "={{ $json.category_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "number",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -256,
+        80
+      ],
+      "id": "44603231-a1bc-490d-995b-3666cd7bd4e4",
+      "name": "Check category_id"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get the original payload\nconst originalData = $('JSON Parser').first().json;\nconst allProductData = $('Select Product').all(); // Get all product data from Check product_id\nconst allReferenceData = $('Split References').all(); // Get all references\n\n// Update the payload with found product information\nconst updatedPayload = { ...originalData };\n\n// Process each product data item\nallProductData.forEach((productItem, index) => {\n    const productData = productItem.json;\n    const referenceData = allReferenceData[index].json; // Match by index position\n    \n    // Use item_index from reference to update the specific item\n    if (referenceData.item_index !== undefined && productData.product_id) {\n        const itemIndex = referenceData.item_index;\n        \n        // Ensure the item index is valid\n        if (itemIndex >= 0 && itemIndex < updatedPayload.payload.items.length) {\n            updatedPayload.payload.items[itemIndex] = {\n                ...updatedPayload.payload.items[itemIndex],\n                product_id: productData.product_id,\n                unit_price: productData.price || updatedPayload.payload.items[itemIndex].unit_price\n            };\n        }\n    }\n});\n\n// Remove all processed references\nupdatedPayload.references = [];\n\n// Mark as fully resolved\nupdatedPayload.confirm_needed = false;\nupdatedPayload.notes = \"Product information automatically resolved from database.\";\n\nreturn updatedPayload;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        144,
+        336
+      ],
+      "id": "f757a0ba-94b0-4cc9-bd61-a294cb86a53d",
+      "name": "Replace Product ID"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Bring in original payload & metadata\nconst originalData = $('JSON Parser').first().json;\n\n// Get missingReferences array (from the previous Function node)\nconst missingReferences = $json.missingReferences || [];\n\n// Create user-friendly error response\nconst result = {\n  success: false,\n  confirm_needed: true,\n  message: \"กรุณาแก้ไขข้อมูลและลองใหม่อีกครั้ง:\",\n  errors: missingReferences.map(ref => ({\n    field: \"product_id\", // default; change to \"category_id\" if needed\n    reference_name: ref,\n    issue: `Product '${ref}' ไม่พบข้อมูลในฐานข้อมูล`,\n    suggestion: `กรุณาเช็คตัวสะกดใหม่หรือลองใช้ชื่อสินค้าอื่นแทน`\n  })),\n  original_payload: originalData.payload,\n  // Keep other metadata for debugging\n  entity: originalData.entity,\n  action: originalData.action\n};\n\nreturn result;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        144,
+        608
+      ],
+      "id": "2d24a444-8b3f-4906-86de-008083cf7c12",
+      "name": "Can't Replace Product ID"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get the original payload and category data\nconst originalData = $('JSON Parser').first().json;\nconst categoryData = items[0].json;\nconst referenceData = $('Split References').first().json;\n\n// Update the payload with found category information\nconst updatedPayload = { ...originalData };\n\n// Safety check: Make sure payload exists\nif (updatedPayload.payload) {\n  // If category_id is null and we found a match\n  if (updatedPayload.payload.category_id === null && categoryData.category_id) {\n    updatedPayload.payload.category_id = categoryData.category_id;\n  }\n}\n\n// Always remove the current reference being processed\nif (updatedPayload.references && Array.isArray(updatedPayload.references)) {\n  updatedPayload.references = updatedPayload.references.filter(ref => \n    ref.name !== referenceData.name  // Use reference name\n  );\n  \n  // If no more references, mark as fully resolved\n  if (updatedPayload.references.length === 0) {\n    delete updatedPayload.references;\n    updatedPayload.confirm_needed = false;\n    updatedPayload.notes = \"Category information automatically resolved from database.\";\n  }\n}\n\nreturn updatedPayload;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "74755424-8902-4e64-8c00-2b901f58d700",
+      "name": "Replace  Category ID"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Enhanced Product/Category Not Found Response\nconst originalData = $('JSON Parser').first().json;\nconst referenceData = $('Split References').first().json;\n\n// Create user-friendly error response\nconst result = {\n  success: false,\n  confirm_needed: true,\n  message: \"กรุณาแก้ไขข้อมูลและลองใหม่อีกครั้ง:\",\n  errors: [\n    {\n      field: referenceData.id_field, // e.g., \"category_id\" or \"product_id\"\n      reference_name: referenceData.name, // e.g., \"มือถือ\"\n      issue: `${referenceData.entity.charAt(0).toUpperCase() + referenceData.entity.slice(1)} '${referenceData.name}' ไม่พบข้อมูลในฐานข้อมูล`,\n      suggestion: `กรุณาเช็คตัวสะกดใหม่หรือลองใช้ชื่อ ${referenceData.entity} อื่นแทน `\n    }\n  ],\n  original_payload: originalData.payload,\n  // Keep other metadata for debugging\n  entity: originalData.entity,\n  action: originalData.action\n};\n\nreturn result;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        144
+      ],
+      "id": "6bd22a71-ce3b-445f-95f3-2930e29dd71f",
+      "name": "Can't Replace Category ID"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {
+          "includeUnpaired": true
+        }
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        272,
+        64
+      ],
+      "id": "a3675237-f2cd-4df1-88fd-600f6eb1e3b6",
+      "name": "Merge Category Result",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $items(\"Merge\")[0].json }}",
+        "options": {
+          "systemMessage": "=You are an API Request Builder.  \nYour job: Convert a structured intermediate object into a final API request JSON.\n\n## Output format\n{\n  \"method\": \"HTTP_METHOD\",\n  \"url\": \"PATH_WITH_PARAMS_AND_QUERY\",\n  \"body\": { ... }   // only for POST/PATCH\n}\n\n## Input format\nYou will receive an array of objects with:\n- entity: product | sale | report_product_stock | report_product_stock_summary | report_profitability_summary\n- action: create | read | update | delete\n- path_params: {}\n- query: {}\n- payload: {}\n- confirm_needed, notes, references (ignored for request)\n\n## Rules\n1. Map (entity+action) to endpoint using the provided API schema (RAG DB).\n2. Path parameters: substitute into {placeholders}.\n3. Query: append as ?k=v (omit null).\n4. Body: only include for POST/PATCH using `payload`. Keep nulls in body.\n5. GET requests: no body.\n6. Always return ONE JSON object (not array).\n7. Do NOT wrap the JSON in markdown fences (``` or ```json).\n8. when PATCH if other field is null don't include it.\n\n## Method mapping\n- create → POST\n- read → GET\n- update → PATCH\n\n## Examples\nInput: [{ \"entity\":\"product\",\"action\":\"create\",\"payload\":{\"name\":\"iPhone 17\",\"price\":56000} }]\nOutput: { \"method\":\"POST\",\"url\":\"/products/\",\"body\":{\"name\":\"iPhone 17\",\"price\":56000} }\n\nInput: [{ \"entity\":\"report_product_stock_summary\",\"action\":\"read\",\"query\":{\"needs_restock_only\":true} }]\nOutput: { \"method\":\"GET\",\"url\":\"/reports/product-stock/summary?needs_restock_only=true\" }\n"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        1792,
+        816
+      ],
+      "id": "f8b509ba-b2c7-4d26-9f89-6479c69afe14",
+      "name": "AI Agent Executor"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ccc97a89-ebc9-4fb0-92e6-7071b0462a58",
+              "leftValue": "={{ $json.confirm_needed }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        560,
+        320
+      ],
+      "id": "c014def5-a287-42dc-8f3d-0397e747b23f",
+      "name": "Check confirm"
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "table": {
+          "__rl": true,
+          "value": "category",
+          "mode": "list",
+          "cachedResultName": "category"
+        },
+        "limit": 15,
+        "combineConditions": "OR",
+        "sort": {
+          "values": [
+            {
+              "column": "category_id"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.5,
+      "position": [
+        992,
+        128
+      ],
+      "id": "c36ca3ac-83ad-4d21-8bd5-088845ae78fd",
+      "name": "Select All Category",
+      "alwaysOutputData": true,
+      "credentials": {
+        "mySql": {
+          "id": "vqiSXP2AgEMu02q6",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "f075d108-bda0-4e03-a6b4-0f339295edc8",
+              "leftValue": "={{ $json.errors[0].field }}",
+              "rightValue": "category_id",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        768,
+        304
+      ],
+      "id": "2472fc10-1895-4e02-b571-1f7b38142c96",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "message": "={{ $('Check confirm').item.json.message }}\n\n{{ $('Check confirm').item.json.errors[0].issue }}\n\n{{ $('Check confirm').item.json.errors\n[0].suggestion }}\n\n{{ \n  $('Select All Category').all().map(x => `- ID ${x.json.category_id}: ${x.json.name}`).join('\\n')\n}}\n\n",
+        "waitUserReply": false,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chat",
+      "typeVersion": 1,
+      "position": [
+        1232,
+        128
+      ],
+      "id": "27eb785e-c055-4dab-8602-ca20c0c5bdfe",
+      "name": "Respond Error Category"
+    },
+    {
+      "parameters": {
+        "message": "={{ $('Check confirm').item.json.message }}\n\n{{ $('Check confirm').item.json.errors[0].issue }}\n\n{{ $('Check confirm').item.json.errors\n[0].suggestion }}\n\n",
+        "waitUserReply": false,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chat",
+      "typeVersion": 1,
+      "position": [
+        992,
+        400
+      ],
+      "id": "84de5a2d-9093-4e97-ba2e-a9f80de4270e",
+      "name": "Respond Error Product"
+    },
+    {
+      "parameters": {
+        "message": "={{ $json.output }}",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chat",
+      "typeVersion": 1,
+      "position": [
+        1296,
+        832
+      ],
+      "id": "5d4756cd-d16d-488b-b0f8-8cace35f0613",
+      "name": "Respond Confirmation"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $items(\"Merge\")[0].json }}",
+        "options": {
+          "systemMessage": "=You are the “Confirmation Summarizer” for a stock-management chatbot (n8n). Always answer in THAI.\n\nOBJECTIVE\nGiven an ARRAY of command objects (from the parser), produce ONE unified confirmation message in THAI for the user to review and reply Yes/No. The message MUST follow the exact layout and be consistent across all endpoint types defined below.\n\nINPUT FORMAT\nEach command object MAY include: entity, action, method, path_template, path_params, query_params, payload_keys, item_payload_keys, constraints, enums, formats, example_request, payload (arbitrary shape), query (object), path_params (object), confirm_needed, notes, references (array).\nPrefer values inside `payload`; if absent there, check the object’s top level. Do NOT invent or alter values.\n\nGLOBAL OUTPUT RULES\n- Output = THAI PLAIN TEXT ONLY (no JSON/markdown/code fences in the final answer to the user).\n- If multiple items, enumerate: 1), 2), 3) …\n- Treat null, empty string \"\", empty array [], and empty object {} as “ยังไม่ระบุ”.\n- Numbers: add thousands separators (123456 → 123,456). Numeric money fields (price, unit_price, revenue, cogs, gross_profit) append “ บาท”.\n- Datetime strings (ISO-like) → format “YYYY-MM-DD HH:mm”. If parsing fails, print raw.\n- Long values (>120 chars) → truncate with “…”.\n- Translate `notes` into concise Thai; if missing, print “-”.\n- Use Thai labels for known entity/action; otherwise keep raw values:\n  • action: create=สร้าง/เพิ่ม, read/get=ดูข้อมูล, update/patch/put=อัปเดต, delete=ลบ\n  • entity: product=สินค้า, sale=การขาย, report_product_stock=รายงานสต็อกสินค้า, report_product_stock_summary=สรุปสต็อกสินค้า, report_profitability_summary=สรุปกำไร\n- Payment method mapping: Cash→เงินสด, Card→บัตรเครดิต, QR→QR. If unknown, keep raw.\n- NEVER show product-only fields (SKU, category_id, reorder_level, ราคา) for non-product entities.\n- The LAST line of the whole message MUST be: “พิมพ์ Yes เพื่อยืนยัน หรือ No เพื่อยกเลิก”.\n\nSTRICT LAYOUT (apply per item; choose the correct template by entity)\n\nHEADER (always):\nสรุปการทำรายการ\n\n{index}). {thai action} {thai entity}\n\nTEMPLATES\n\n1) PRODUCT (entity=product; actions: create, read, update)\nBody (print each line; if missing show “ยังไม่ระบุ”):\n- ชื่อ/หัวข้อ: {payload.name or name}\n- หมวดหมู่ (category_id): {payload.category_id}\n- SKU: {payload.sku or code}\n- ราคา: {payload.price → “#,### บาท” if numeric}\n- จุดสั่งซื้อซ้ำ (reorder_level): {payload.reorder_level}\n\n2) SALE (entity=sale; action=create)\nBody:\nรายละเอียดการขาย:\n- วันที่เวลา: {payload.sale_datetime}\n- วิธีชำระเงิน: {payload.payment_method (mapped)}\n- หมายเหตุ (การขาย): {payload.notes or “-”}\nรายการสินค้า:\n{for each payload.items[i] up to 10, ONE LINE per item, exact format:}\n{i}) {prefer item.name if present else item.product_id}: จำนวน: {item.quantity or “ยังไม่ระบุ”}, ราคา: {item.unit_price → “#,### บาท” if numeric}, ส่วนลด: {if 0..1 → N% (e.g., 0.2→20%), else raw or “ยังไม่ระบุ”}\n{if >10 items: end with “… และมีอีก X รายการ”}\n\n3) REPORT – Product Stock (entity=report_product_stock, action=read)\nBody:\nตัวกรอง:\n- {from `query`: page, limit, search, productFilter (keep camelCase exactly)}\nหมายเหตุ:\n- {notes or “-”}\n\n4) REPORT – Product Stock Summary (entity=report_product_stock_summary, action=read)\nBody:\nตัวกรอง:\n- {from `query`: needs_restock_only}\nหมายเหตุ:\n- {notes or “-”}\n\n5) REPORT – Profitability Summary (entity=report_profitability_summary, action=read)\nBody:\nตัวกรอง:\n- {from `query`: start_date, end_date}\nหมายเหตุ:\n- {notes or “-”}\n\n6) FALLBACK (unknown entity)\nBody:\nสรุปข้อมูล:\n- แสดงคีย์สำคัญที่พบจาก payload/query (ไม่เกิน 10 บรรทัด) รูปแบบ “คีย์: ค่า (ย่อถ้ายาว)”\n\nINCOMPLETE FIELDS (SCOPE-AWARE; only when truly missing)\nAfter EACH item, include this block ONLY if something is missing at the SAME scope.\nTitle:\nสิ่งที่ยังไม่สมบูรณ์:\nRules:\n• PRODUCT scope → check missing identifiers at product level: category_id, sku, id/code, price, reorder_level; list as “<field> ยังไม่ระบุ”.\n• SALE scope → DO NOT check top level for product_id. Instead, check EACH payload.items[i]:\n   - If an item lacks product_id/quantity/unit_price, list as:\n     “รายการสินค้า #{i}: product_id ยังไม่ระบุ” (หรือ quantity/unit_price ยังไม่ระบุ)\n• For REPORT/READ filters, if required filter(s) are recognized but absent, list the specific key(s).\n• Treat numeric 0 as valid (not missing).\nIf nothing is missing, OMIT the entire “สิ่งที่ยังไม่สมบูรณ์:” block.\n\nNOTES SECTION (always after the incomplete block)\nหมายเหตุ:\n- {translate `notes` to Thai if present, otherwise “-”}\n\nCLOSING (must be the last line of the whole message)\nพิมพ์ Yes เพื่อยืนยัน หรือ No เพื่อยกเลิก\n"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        896,
+        832
+      ],
+      "id": "96ea3621-c01e-4c30-a458-6d383cc07543",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        816,
+        1104
+      ],
+      "id": "b0ea2bfd-0903-4090-aa45-acab749a2d05",
+      "name": "OpenAI Chat Model2",
+      "credentials": {
+        "openAiApi": {
+          "id": "tUgPKkvjfRqR5Zlf",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "message": "=รายการถูกยกเลิกแล้ว",
+        "waitUserReply": false,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chat",
+      "typeVersion": 1,
+      "position": [
+        1280,
+        1152
+      ],
+      "id": "16cb39f6-94cc-473e-a3f2-0f36a947401d",
+      "name": "Respond Abort",
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-5-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-5-mini"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        1696,
+        1056
+      ],
+      "id": "fb12e6dd-a642-4de1-a531-2de06901632d",
+      "name": "OpenAI Chat Model3",
+      "credentials": {
+        "openAiApi": {
+          "id": "tUgPKkvjfRqR5Zlf",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// The incoming data has an 'output' field which is a string.\n// We need to parse this string into a real JSON object.\nconst item = $input.first();\nconst parsedJson = JSON.parse(item.json.output);\n\n// Return the newly parsed object for the next node to use.\nreturn [{\n  json: parsedJson\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2160,
+        816
+      ],
+      "id": "0042904a-e854-4ff4-a151-c248405b8b53",
+      "name": "JSON Parser1"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.IM_URL}}{{ $json.url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "=json",
+        "bodyParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2768,
+        816
+      ],
+      "id": "36333888-aa75-4d04-9137-514e02678c1d",
+      "name": "HTTP Post Request",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "6a6a9195-4a91-4e09-8b34-738f5cc79300",
+              "leftValue": "={{ $json.sameCount }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -224,
+        448
+      ],
+      "id": "8ba296e3-1ca4-43ce-a780-fd526d834168",
+      "name": "Check Same count"
+    },
+    {
+      "parameters": {
+        "url": "={{$env.IM_URL}}{{ $json.url }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2768,
+        608
+      ],
+      "id": "190af09b-d173-4e30-8c77-b268aa965086",
+      "name": "HTTP GET Request",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{$env.IM_URL}}{{ $json.url }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2768,
+        1040
+      ],
+      "id": "69ba1dff-31d0-43d1-af5a-471f11b1b885",
+      "name": "HTTP Patch Request",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        3120,
+        1088
+      ],
+      "id": "aec402cd-f406-4416-8487-1a3698944522",
+      "name": "OpenAI Chat Model5",
+      "credentials": {
+        "openAiApi": {
+          "id": "tUgPKkvjfRqR5Zlf",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=User: {{ $('When chat message received').first().json.chatInput }}\n\nAnswer: {{JSON.stringify($json) }}",
+        "options": {
+          "systemMessage": "=You are a chatbot assistant for an inventory and sales management system.  \nYour job is:\n\n1. Read the user's input (in Thai).  \n2. Look at the API response data (JSON) provided to you.  \n3. Reply to the user in **Thai natural language** with a friendly, clear, and natural explanation of the results.  \n\nRules:  \n- Never reply with JSON or code. Always summarize results in Thai sentences.  \n- If the operation is **create** or **update**, confirm the action in Thai, e.g. \"เพิ่มสินค้า ... เรียบร้อยแล้ว\" or \"อัปเดตข้อมูลสินค้า ... สำเร็จ\".  \n- If the operation is **get/read**, summarize the data in Thai, e.g. if it is a stock summary, say:  \n  \"ตอนนี้มีสินค้า ... รายการ มูลค่ารวม ... บาท และมี ... รายการที่ต้องสั่งเพิ่ม\"  \n- If no data is found, reply in Thai: \"ไม่พบข้อมูลตามที่ค้นหา\"  \n- Use numbers and values from the JSON and explain them clearly in Thai.  \n- Always keep the reply polite, concise, and easy to understand.  \n"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        3184,
+        816
+      ],
+      "id": "d4e6e6fb-c451-4878-9747-eca9f818a11c",
+      "name": "AI Agent Reply"
+    },
+    {
+      "parameters": {},
+      "type": "@n8n/n8n-nodes-langchain.rerankerCohere",
+      "typeVersion": 1,
+      "position": [
+        2032,
+        1376
+      ],
+      "id": "ad260522-3298-4204-ad8a-42ab501932cf",
+      "name": "Reranker Cohere1",
+      "credentials": {
+        "cohereApi": {
+          "id": "6c9WffTHqXNWclOr",
+          "name": "CohereApi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "text-embedding-3-large",
+        "options": {
+          "dimensions": 1024
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        1792,
+        1376
+      ],
+      "id": "0c6f6001-cf6a-4b33-a874-ee665b747754",
+      "name": "Embeddings OpenAI1",
+      "credentials": {
+        "openAiApi": {
+          "id": "tUgPKkvjfRqR5Zlf",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "retrieve-as-tool",
+        "toolDescription": "=This tool stores and retrieves vector embeddings in Pinecone. It is used to search the API documentation and schema (products, sales, reports) by semantic similarity. The LLM queries Pinecone with embeddings to find the most relevant endpoint definitions and examples, then uses that context to build correct API requests.\n",
+        "pineconeIndex": {
+          "__rl": true,
+          "value": "inventory-api",
+          "mode": "list",
+          "cachedResultName": "inventory-api"
+        },
+        "topK": 10,
+        "useReranker": true,
+        "options": {
+          "pineconeNamespace": "api_info",
+          "metadata": {
+            "metadataValues": [
+              {
+                "name": "topic",
+                "value": "={{ $('AI Agent Classifier').first().json.output }}"
+              }
+            ]
+          }
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.vectorStorePinecone",
+      "typeVersion": 1.3,
+      "position": [
+        1872,
+        1136
+      ],
+      "id": "29135740-baaa-4ad7-9931-370c860da8b6",
+      "name": "Pinecone Vector Store",
+      "credentials": {
+        "pineconeApi": {
+          "id": "tjoLOWsIQUPRCBh8",
+          "name": "PineconeApi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Expected references (from Split References)\nconst referenceItems = $('Split References').all().map(i => i.json);\n\n// Actual resolved products (from Select Product)\nconst productItems = $('Select Product').all().map(i => i.json);\n\n// Normalize names for comparison\nconst referenceNames = referenceItems.map(r => r.name.toLowerCase());\nconst productNames = productItems.map(p => p.name.toLowerCase());\n\n// Find missing references\nconst missing = referenceNames.filter(r =>\n  !productNames.some(p => p.includes(r) || r.includes(p))\n);\n\n// Counts\nconst referenceCount = referenceItems.length;\nconst productCount = productItems.length;\n\n// Compare counts\nconst sameCount = referenceCount === productCount;\n\nreturn [{\n  referenceCount,\n  productCount,\n  sameCount,\n  missingReferences: missing\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -496,
+        560
+      ],
+      "id": "197715c3-0dbc-406b-8dbd-80c200a4932b",
+      "name": "Check result"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {
+          "includeUnpaired": true
+        }
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        720,
+        832
+      ],
+      "id": "b0ebad96-e002-4d27-bef7-64ec1b095a63",
+      "name": "Merge",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "message": "={{ $json.output }}",
+        "waitUserReply": false,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chat",
+      "typeVersion": 1,
+      "position": [
+        3680,
+        816
+      ],
+      "id": "a9253bde-e374-4285-bc7e-93fe5b8b1621",
+      "name": "Respond to Chat"
+    },
+    {
+      "parameters": {
+        "message": "1. ค้นหาข้อมูลสินค้า  \n2. สร้างสินค้าใหม่  \n3. อัปเดทข้อมูลสินค้า (ต้องการ id สินค้า)  \n4. สร้างบิลรายการขาย  \n5. ให้ข้อมูลรายการสต็อก  \n6. ให้ข้อมูลสรุปรายการสต็อก  \n7. ให้ข้อมูลสรุปกำไรของร้าน",
+        "waitUserReply": false,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chat",
+      "typeVersion": 1,
+      "position": [
+        -1520,
+        688
+      ],
+      "id": "0b457bf8-22cb-4a60-9a9f-55651005f748",
+      "name": "Respond Feature"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "7b3fd915-3830-413a-9bda-04d3d8bf7d0a",
+              "leftValue": "={{ $json.chatInput }}",
+              "rightValue": "ทำอะไรได้บ้าง",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -1744,
+        816
+      ],
+      "id": "6157d67e-a3e3-43e0-a7b1-a168471fad38",
+      "name": "Check user input"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "607d70a2-86fa-41ab-959f-9006d39bb1ba",
+              "leftValue": "={{ $json.chatInput }}",
+              "rightValue": "Yes",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1488,
+        832
+      ],
+      "id": "44aa5ba0-606c-4b34-868b-738570e3a1c0",
+      "name": "Check user Reply"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.method }}",
+                    "rightValue": "GET",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "2993bfb0-3913-4619-8e4f-17f46af5e583"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "GET"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "ff47c154-a988-4005-9f1b-77a89c6afdc7",
+                    "leftValue": "={{ $json.method }}",
+                    "rightValue": "POST",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "POST"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "efba59c1-6a8a-4201-a4a3-055f4dcb66a7",
+                    "leftValue": "={{ $json.method }}",
+                    "rightValue": "PATCH",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "PATCH"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        2368,
+        800
+      ],
+      "id": "f38ef439-271f-4611-b2d5-d3b97c39618b",
+      "name": "Switch HTTP"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When chat message received": {
+      "main": [
+        [
+          {
+            "node": "Check user input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent Parser",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embeddings OpenAI": {
+      "ai_embedding": [
+        [
+          {
+            "node": "API Information",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reranker Cohere": {
+      "ai_reranker": [
+        [
+          {
+            "node": "API Information",
+            "type": "ai_reranker",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent Parser": {
+      "main": [
+        [
+          {
+            "node": "JSON Parser",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API Information": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent Parser",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent Classifier",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent Classifier": {
+      "main": [
+        [
+          {
+            "node": "AI Agent Parser",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "JSON Parser": {
+      "main": [
+        [
+          {
+            "node": "Check references",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Select Category",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Select Product",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Select Product": {
+      "main": [
+        [
+          {
+            "node": "Check result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split References": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check references": {
+      "main": [
+        [
+          {
+            "node": "Split References",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Select Category": {
+      "main": [
+        [
+          {
+            "node": "Check category_id",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Replace Product ID": {
+      "main": [
+        [
+          {
+            "node": "Check confirm",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Can't Replace Product ID": {
+      "main": [
+        [
+          {
+            "node": "Check confirm",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check category_id": {
+      "main": [
+        [
+          {
+            "node": "Replace  Category ID",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Can't Replace Category ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Replace  Category ID": {
+      "main": [
+        [
+          {
+            "node": "Merge Category Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Can't Replace Category ID": {
+      "main": [
+        [
+          {
+            "node": "Merge Category Result",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Category Result": {
+      "main": [
+        [
+          {
+            "node": "Check confirm",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check confirm": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Select All Category": {
+      "main": [
+        [
+          {
+            "node": "Respond Error Category",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Select All Category",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Error Product",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model2": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Respond Confirmation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond Confirmation": {
+      "main": [
+        [
+          {
+            "node": "Check user Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent Executor": {
+      "main": [
+        [
+          {
+            "node": "JSON Parser1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model3": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent Executor",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "JSON Parser1": {
+      "main": [
+        [
+          {
+            "node": "Switch HTTP",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Same count": {
+      "main": [
+        [
+          {
+            "node": "Replace Product ID",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Can't Replace Product ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP GET Request": {
+      "main": [
+        [
+          {
+            "node": "AI Agent Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Post Request": {
+      "main": [
+        [
+          {
+            "node": "AI Agent Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Patch Request": {
+      "main": [
+        [
+          {
+            "node": "AI Agent Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model5": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent Reply",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reranker Cohere1": {
+      "ai_reranker": [
+        [
+          {
+            "node": "Pinecone Vector Store",
+            "type": "ai_reranker",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embeddings OpenAI1": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Pinecone Vector Store",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pinecone Vector Store": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent Executor",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check result": {
+      "main": [
+        [
+          {
+            "node": "Check Same count",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent Reply": {
+      "main": [
+        [
+          {
+            "node": "Respond to Chat",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check user input": {
+      "main": [
+        [
+          {
+            "node": "Respond Feature",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "AI Agent Classifier",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check user Reply": {
+      "main": [
+        [
+          {
+            "node": "AI Agent Executor",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Abort",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch HTTP": {
+      "main": [
+        [
+          {
+            "node": "HTTP GET Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HTTP Post Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HTTP Patch Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "fdc41c95-c538-4b77-88d7-08ea449de28d",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "21071331ddc03e1235891b76e4c08b097055c64f6565eedd1f5448cb3f54d724"
+  },
+  "id": "iKiw1rQA9yhfYl5x",
+  "tags": []
+}
